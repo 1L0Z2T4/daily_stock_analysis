@@ -8,8 +8,16 @@
 ## [Unreleased]
 
 ### 计划中
-- 钉钉机器人支持
 - Web 管理界面
+
+## [1.3.0] - 2026-01-12
+
+### 新增
+- 🔗 自定义 Webhook 支持
+  - 支持任意 POST JSON 的 Webhook 端点
+  - 自动识别钉钉、Discord、Slack、Bark 等常见服务格式
+  - 支持配置多个 Webhook（逗号分隔）
+  - 通过 `CUSTOM_WEBHOOK_URLS` 环境变量配置
 
 ## [1.2.0] - 2026-01-11
 

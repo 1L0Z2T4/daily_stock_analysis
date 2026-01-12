@@ -70,6 +70,10 @@ class Config:
     email_password: Optional[str] = None  # 邮箱密码/授权码
     email_receivers: List[str] = field(default_factory=list)  # 收件人列表（留空则发给自己）
     
+    # 自定义 Webhook（支持多个，逗号分隔）
+    # 适用于：钉钉、Discord、Slack、自建服务等任意支持 POST JSON 的 Webhook
+    custom_webhook_urls: List[str] = field(default_factory=list)
+    
     # === 数据库配置 ===
     database_path: str = "./data/stock_analysis.db"
     
@@ -170,6 +174,7 @@ class Config:
             email_sender=os.getenv('EMAIL_SENDER'),
             email_password=os.getenv('EMAIL_PASSWORD'),
             email_receivers=[r.strip() for r in os.getenv('EMAIL_RECEIVERS', '').split(',') if r.strip()],
+            custom_webhook_urls=[u.strip() for u in os.getenv('CUSTOM_WEBHOOK_URLS', '').split(',') if u.strip()],
             database_path=os.getenv('DATABASE_PATH', './data/stock_analysis.db'),
             log_dir=os.getenv('LOG_DIR', './logs'),
             log_level=os.getenv('LOG_LEVEL', 'INFO'),

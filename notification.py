@@ -38,6 +38,7 @@ class NotificationChannel(Enum):
     FEISHU = "feishu"      # 飞书
     TELEGRAM = "telegram"  # Telegram
     EMAIL = "email"        # 邮件
+    CUSTOM = "custom"      # 自定义 Webhook
     UNKNOWN = "unknown"    # 未知
 
 
@@ -80,6 +81,7 @@ class ChannelDetector:
             NotificationChannel.FEISHU: "飞书",
             NotificationChannel.TELEGRAM: "Telegram",
             NotificationChannel.EMAIL: "邮件",
+            NotificationChannel.CUSTOM: "自定义Webhook",
             NotificationChannel.UNKNOWN: "未知渠道",
         }
         return names.get(channel, "未知渠道")
@@ -128,6 +130,9 @@ class NotificationService:
             'receivers': config.email_receivers or ([config.email_sender] if config.email_sender else []),
         }
         
+        # 自定义 Webhook 配置
+        self._custom_webhook_urls = getattr(config, 'custom_webhook_urls', []) or []
+        
         # 检测所有已配置的渠道
         self._available_channels = self._detect_all_channels()
         
@@ -161,6 +166,10 @@ class NotificationService:
         # 邮件
         if self._is_email_configured():
             channels.append(NotificationChannel.EMAIL)
+        
+        # 自定义 Webhook
+        if self._custom_webhook_urls:
+            channels.append(NotificationChannel.CUSTOM)
         
         return channels
     
@@ -1302,6 +1311,116 @@ class NotificationService:
         
         return result
     
+    def send_to_custom(self, content: str) -> bool:
+        """
+        推送消息到自定义 Webhook
+        
+        支持任意接受 POST JSON 的 Webhook 端点
+        默认发送格式：{"text": "消息内容", "content": "消息内容"}
+        
+        适用于：
+        - 钉钉机器人
+        - Discord Webhook
+        - Slack Incoming Webhook
+        - 自建通知服务
+        - 其他支持 POST JSON 的服务
+        
+        Args:
+            content: 消息内容（Markdown 格式）
+            
+        Returns:
+            是否至少有一个 Webhook 发送成功
+        """
+        if not self._custom_webhook_urls:
+            logger.warning("未配置自定义 Webhook，跳过推送")
+            return False
+        
+        success_count = 0
+        
+        for i, url in enumerate(self._custom_webhook_urls):
+            try:
+                # 通用 JSON 格式，兼容大多数 Webhook
+                # 钉钉格式: {"msgtype": "text", "text": {"content": "xxx"}}
+                # Slack 格式: {"text": "xxx"}
+                # Discord 格式: {"content": "xxx"}
+                
+                # 检测 URL 类型并构造对应格式
+                payload = self._build_custom_webhook_payload(url, content)
+                
+                headers = {
+                    'Content-Type': 'application/json',
+                    'User-Agent': 'StockAnalysis/1.0'
+                }
+                
+                response = requests.post(
+                    url,
+                    json=payload,
+                    headers=headers,
+                    timeout=30
+                )
+                
+                if response.status_code == 200:
+                    logger.info(f"自定义 Webhook {i+1} 推送成功")
+                    success_count += 1
+                else:
+                    logger.error(f"自定义 Webhook {i+1} 推送失败: HTTP {response.status_code}")
+                    logger.debug(f"响应内容: {response.text[:200]}")
+                    
+            except Exception as e:
+                logger.error(f"自定义 Webhook {i+1} 推送异常: {e}")
+        
+        logger.info(f"自定义 Webhook 推送完成：成功 {success_count}/{len(self._custom_webhook_urls)}")
+        return success_count > 0
+    
+    def _build_custom_webhook_payload(self, url: str, content: str) -> dict:
+        """
+        根据 URL 构建对应的 Webhook payload
+        
+        自动识别常见服务并使用对应格式
+        """
+        url_lower = url.lower()
+        
+        # 钉钉机器人
+        if 'dingtalk' in url_lower or 'oapi.dingtalk.com' in url_lower:
+            return {
+                "msgtype": "markdown",
+                "markdown": {
+                    "title": "股票分析报告",
+                    "text": content
+                }
+            }
+        
+        # Discord Webhook
+        if 'discord.com/api/webhooks' in url_lower or 'discordapp.com/api/webhooks' in url_lower:
+            # Discord 限制 2000 字符
+            truncated = content[:1900] + "..." if len(content) > 1900 else content
+            return {
+                "content": truncated
+            }
+        
+        # Slack Incoming Webhook
+        if 'hooks.slack.com' in url_lower:
+            return {
+                "text": content,
+                "mrkdwn": True
+            }
+        
+        # Bark (iOS 推送)
+        if 'api.day.app' in url_lower:
+            return {
+                "title": "股票分析报告",
+                "body": content[:4000],  # Bark 限制
+                "group": "stock"
+            }
+        
+        # 通用格式（兼容大多数服务）
+        return {
+            "text": content,
+            "content": content,
+            "message": content,
+            "body": content
+        }
+    
     def send(self, content: str) -> bool:
         """
         统一发送接口 - 向所有已配置的渠道发送
@@ -1335,6 +1454,8 @@ class NotificationService:
                     result = self.send_to_telegram(content)
                 elif channel == NotificationChannel.EMAIL:
                     result = self.send_to_email(content)
+                elif channel == NotificationChannel.CUSTOM:
+                    result = self.send_to_custom(content)
                 else:
                     logger.warning(f"不支持的通知渠道: {channel}")
                     result = False

@@ -349,12 +349,20 @@ git push -u origin main
 | Secret 名称 | 说明 | 必填 |
 |------------|------|------|
 | `GEMINI_API_KEY` | Gemini AI API Key | ✅ |
-| `WECHAT_WEBHOOK_URL` | 企业微信机器人 Webhook | ✅ |
+| `WECHAT_WEBHOOK_URL` | 企业微信机器人 Webhook | 可选* |
+| `FEISHU_WEBHOOK_URL` | 飞书机器人 Webhook | 可选* |
+| `TELEGRAM_BOT_TOKEN` | Telegram Bot Token | 可选* |
+| `TELEGRAM_CHAT_ID` | Telegram Chat ID | 可选* |
+| `EMAIL_SENDER` | 发件人邮箱 | 可选* |
+| `EMAIL_PASSWORD` | 邮箱授权码 | 可选* |
+| `CUSTOM_WEBHOOK_URLS` | 自定义 Webhook（多个逗号分隔） | 可选* |
 | `STOCK_LIST` | 自选股列表，如 `600519,300750` | ✅ |
 | `TAVILY_API_KEYS` | Tavily 搜索 API Key | 推荐 |
 | `SERPAPI_API_KEYS` | SerpAPI Key | 可选 |
 | `TUSHARE_TOKEN` | Tushare Token | 可选 |
 | `GEMINI_MODEL` | 模型名称（默认 gemini-2.0-flash） | 可选 |
+
+> *注：通知渠道至少配置一个，支持多渠道同时推送
 
 #### 3. 验证 Workflow 文件
 

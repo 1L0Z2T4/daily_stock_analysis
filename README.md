@@ -69,8 +69,11 @@
 | `EMAIL_SENDER` | 发件人邮箱（如 `xxx@qq.com`） | 可选 |
 | `EMAIL_PASSWORD` | 邮箱授权码（非登录密码） | 可选 |
 | `EMAIL_RECEIVERS` | 收件人邮箱（留空则发给自己） | 可选 |
+| `CUSTOM_WEBHOOK_URLS` | 自定义 Webhook（多个用逗号分隔） | 可选 |
 
 > *注：至少配置一个渠道，配置多个则同时推送到所有渠道
+> 
+> 自定义 Webhook 支持：钉钉、Discord、Slack、Bark、自建服务等任意支持 POST JSON 的 Webhook
 
 **其他配置**
 
@@ -231,10 +234,8 @@ daily_stock_analysis/
 - [x] 飞书机器人
 - [x] Telegram Bot
 - [x] 邮件通知（SMTP）
-- [ ] 钉钉机器人
-- [ ] Discord Webhook
-- [ ] Slack Webhook
-- [ ] iOS/Android 推送（Bark/Pushover）
+- [x] 自定义 Webhook（支持钉钉、Discord、Slack、Bark 等）
+- [ ] iOS/Android 推送（Pushover）
 
 ### 🤖 AI 模型支持
 - [x] Google Gemini（主力，免费额度）
