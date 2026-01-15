@@ -72,6 +72,36 @@ docs: 更新 README 部署说明
 - 重要逻辑添加注释
 - 新功能需要更新相关文档
 
+### CI 自动检查
+
+提交 PR 后，CI 会自动运行以下检查：
+
+| 检查项 | 说明 | 必须通过 |
+|--------|------|:--------:|
+| 🐍 语法检查 | Python 语法正确性 | ✅ |
+| 📦 依赖安装 | Python 3.10/3.11/3.12 多版本测试 | ✅ |
+| 🐳 Docker 构建 | Docker 镜像能正常构建 | ✅ |
+| 🔍 代码规范 | Black/Flake8/isort 格式检查 | ⚠️ 警告 |
+| 🔒 安全检查 | Bandit/Safety 漏洞扫描 | ⚠️ 警告 |
+| 🧪 单元测试 | pytest 测试（如有） | ✅ |
+
+**本地运行检查：**
+
+```bash
+# 安装检查工具
+pip install black flake8 isort bandit
+
+# 代码格式化
+black .
+isort .
+
+# 静态检查
+flake8 .
+
+# 安全扫描
+bandit -r . -x ./test_*.py
+```
+
 ## 📋 优先贡献方向
 
 查看 [Roadmap](README.md#-roadmap) 了解当前需要的功能：

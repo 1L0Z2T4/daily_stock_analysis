@@ -60,3 +60,5 @@ Thumbs.db
 htmlcov/
 
 docs/
+
+run.sh

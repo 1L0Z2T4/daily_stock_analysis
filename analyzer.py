@@ -441,9 +441,14 @@ class GeminiAnalyzer:
             logger.debug("OpenAI 兼容 API 未配置或配置无效")
             return
         
+        # 分离 import 和客户端创建，以便提供更准确的错误信息
         try:
             from openai import OpenAI
-            
+        except ImportError:
+            logger.error("未安装 openai 库，请运行: pip install openai")
+            return
+        
+        try:
             # base_url 可选，不填则使用 OpenAI 官方默认地址
             client_kwargs = {"api_key": config.openai_api_key}
             if config.openai_base_url and config.openai_base_url.startswith('http'):
@@ -453,10 +458,18 @@ class GeminiAnalyzer:
             self._current_model_name = config.openai_model
             self._use_openai = True
             logger.info(f"OpenAI 兼容 API 初始化成功 (base_url: {config.openai_base_url}, model: {config.openai_model})")
-        except ImportError:
-            logger.error("未安装 openai 库，请运行: pip install openai")
+        except ImportError as e:
+            # 依赖缺失（如 socksio）
+            if 'socksio' in str(e).lower() or 'socks' in str(e).lower():
+                logger.error(f"OpenAI 客户端需要 SOCKS 代理支持，请运行: pip install httpx[socks] 或 pip install socksio")
+            else:
+                logger.error(f"OpenAI 依赖缺失: {e}")
         except Exception as e:
-            logger.error(f"OpenAI 兼容 API 初始化失败: {e}")
+            error_msg = str(e).lower()
+            if 'socks' in error_msg or 'socksio' in error_msg or 'proxy' in error_msg:
+                logger.error(f"OpenAI 代理配置错误: {e}，如使用 SOCKS 代理请运行: pip install httpx[socks]")
+            else:
+                logger.error(f"OpenAI 兼容 API 初始化失败: {e}")
     
     def _init_model(self) -> None:
         """

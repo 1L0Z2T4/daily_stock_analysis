@@ -35,17 +35,18 @@ import logging
 import sys
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from datetime import datetime, date
+from datetime import datetime, date, timezone, timedelta
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
 from typing import List, Dict, Any, Optional, Tuple
+from feishu_doc import FeishuDocManager
 
 from config import get_config, Config
 from storage import get_db, DatabaseManager
 from data_provider import DataFetcherManager
 from data_provider.akshare_fetcher import AkshareFetcher, RealtimeQuote, ChipDistribution
 from analyzer import GeminiAnalyzer, AnalysisResult, STOCK_NAME_MAP
-from notification import NotificationService, send_daily_report
+from notification import NotificationService, NotificationChannel, send_daily_report
 from search_service import SearchService, SearchResponse
 from stock_analyzer import StockTrendAnalyzer, TrendAnalysisResult
 from market_analyzer import MarketAnalyzer
@@ -499,6 +500,7 @@ class StockAnalysisPipeline:
         
         # 使用配置中的股票列表
         if stock_codes is None:
+            self.config.refresh_stock_list()
             stock_codes = self.config.stock_list
         
         if not stock_codes:
@@ -576,12 +578,33 @@ class StockAnalysisPipeline:
             
             # 推送通知
             if self.notifier.is_available():
-                # 生成精简版决策仪表盘用于推送
-                dashboard_content = self.notifier.generate_wechat_dashboard(results)
-                logger.info(f"决策仪表盘长度: {len(dashboard_content)} 字符")
-                logger.debug(f"推送内容:\n{dashboard_content}")
-                
-                success = self.notifier.send(dashboard_content)
+                channels = self.notifier.get_available_channels()
+
+                # 企业微信：只发精简版（平台限制）
+                wechat_success = False
+                if NotificationChannel.WECHAT in channels:
+                    dashboard_content = self.notifier.generate_wechat_dashboard(results)
+                    logger.info(f"企业微信仪表盘长度: {len(dashboard_content)} 字符")
+                    logger.debug(f"企业微信推送内容:\n{dashboard_content}")
+                    wechat_success = self.notifier.send_to_wechat(dashboard_content)
+
+                # 其他渠道：发完整报告（避免自定义 Webhook 被 wechat 截断逻辑污染）
+                non_wechat_success = False
+                for channel in channels:
+                    if channel == NotificationChannel.WECHAT:
+                        continue
+                    if channel == NotificationChannel.FEISHU:
+                        non_wechat_success = self.notifier.send_to_feishu(report) or non_wechat_success
+                    elif channel == NotificationChannel.TELEGRAM:
+                        non_wechat_success = self.notifier.send_to_telegram(report) or non_wechat_success
+                    elif channel == NotificationChannel.EMAIL:
+                        non_wechat_success = self.notifier.send_to_email(report) or non_wechat_success
+                    elif channel == NotificationChannel.CUSTOM:
+                        non_wechat_success = self.notifier.send_to_custom(report) or non_wechat_success
+                    else:
+                        logger.warning(f"未知通知渠道: {channel}")
+
+                success = wechat_success or non_wechat_success
                 if success:
                     logger.info("决策仪表盘推送成功")
                 else:
@@ -686,6 +709,15 @@ def run_market_review(notifier: NotificationService, analyzer=None, search_servi
         review_report = market_analyzer.run_daily_review()
         
         if review_report:
+            # 保存报告到文件
+            date_str = datetime.now().strftime('%Y%m%d')
+            report_filename = f"market_review_{date_str}.md"
+            filepath = notifier.save_report_to_file(
+                f"# 🎯 大盘复盘\n\n{review_report}", 
+                report_filename
+            )
+            logger.info(f"大盘复盘报告已保存: {filepath}")
+            
             # 推送通知
             if notifier.is_available():
                 # 添加标题
@@ -730,12 +762,17 @@ def run_full_analysis(
         )
         
         # 2. 运行大盘复盘（如果启用且不是仅个股模式）
+        market_report = ""
         if config.market_review_enabled and not args.no_market_review:
-            run_market_review(
+            # 只调用一次，并获取结果
+            review_result = run_market_review(
                 notifier=pipeline.notifier,
                 analyzer=pipeline.analyzer,
                 search_service=pipeline.search_service
             )
+            # 如果有结果，赋值给 market_report 用于后续飞书文档生成
+            if review_result:
+                market_report = review_result
         
         # 输出摘要
         if results:
@@ -748,6 +785,39 @@ def run_full_analysis(
                 )
         
         logger.info("\n任务执行完成")
+
+        # === 新增：生成飞书云文档 ===
+        try:
+            feishu_doc = FeishuDocManager()
+            if feishu_doc.is_configured() and (results or market_report):
+                logger.info("正在创建飞书云文档...")
+
+                # 1. 准备标题 "01-01 13:01大盘复盘"
+                tz_cn = timezone(timedelta(hours=8))
+                now = datetime.now(tz_cn)
+                doc_title = f"{now.strftime('%Y-%m-%d %H:%M')} 大盘复盘"
+
+                # 2. 准备内容 (拼接个股分析和大盘复盘)
+                full_content = ""
+
+                # 添加大盘复盘内容（如果有）
+                if market_report:
+                    full_content += f"# 📈 大盘复盘\n\n{market_report}\n\n---\n\n"
+
+                # 添加个股决策仪表盘（使用 NotificationService 生成）
+                if results:
+                    dashboard_content = pipeline.notifier.generate_dashboard_report(results)
+                    full_content += f"# 🚀 个股决策仪表盘\n\n{dashboard_content}"
+
+                # 3. 创建文档
+                doc_url = feishu_doc.create_daily_doc(doc_title, full_content)
+                if doc_url:
+                    logger.info(f"飞书云文档创建成功: {doc_url}")
+                    # 可选：将文档链接也推送到群里
+                    pipeline.notifier.send(f"[{now.strftime('%Y-%m-%d %H:%M')}] 复盘文档创建成功: {doc_url}")
+
+        except Exception as e:
+            logger.error(f"飞书文档生成失败: {e}")
         
     except Exception as e:
         logger.exception(f"分析流程执行失败: {e}")
