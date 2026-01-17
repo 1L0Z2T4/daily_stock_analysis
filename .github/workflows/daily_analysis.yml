@@ -56,6 +56,7 @@ jobs:
           TUSHARE_TOKEN: ${{ secrets.TUSHARE_TOKEN }}
           
           # 搜索服务
+          BOCHA_API_KEYS: ${{ secrets.BOCHA_API_KEYS }}
           TAVILY_API_KEYS: ${{ secrets.TAVILY_API_KEYS }}
           SERPAPI_API_KEYS: ${{ secrets.SERPAPI_API_KEYS }}
           
@@ -99,6 +100,8 @@ jobs:
           echo "运行模式: $MODE"
           echo "自选股: $STOCK_LIST"
           echo "时间: $(TZ='Asia/Shanghai' date '+%Y-%m-%d %H:%M:%S')"
+          echo "BOCHA_API_KEYS 是否配置: $([ -n "$BOCHA_API_KEYS" ] && echo '是' || echo '否')"
+          echo "BOCHA_API_KEYS 长度: ${#BOCHA_API_KEYS}"
           echo "=========================================="
           
           if [ "$MODE" = "market-only" ]; then

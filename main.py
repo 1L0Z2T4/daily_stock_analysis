@@ -156,6 +156,7 @@ class StockAnalysisPipeline:
         
         # 初始化搜索服务
         self.search_service = SearchService(
+            bocha_keys=self.config.bocha_api_keys,
             tavily_keys=self.config.tavily_api_keys,
             serpapi_keys=self.config.serpapi_keys,
         )
@@ -424,7 +425,8 @@ class StockAnalysisPipeline:
     def process_single_stock(
         self, 
         code: str,
-        skip_analysis: bool = False
+        skip_analysis: bool = False,
+        single_stock_notify: bool = False
     ) -> Optional[AnalysisResult]:
         """
         处理单只股票的完整流程
@@ -433,12 +435,14 @@ class StockAnalysisPipeline:
         1. 获取数据
         2. 保存数据
         3. AI 分析
+        4. 单股推送（可选，#55）
         
         此方法会被线程池调用，需要处理好异常
         
         Args:
             code: 股票代码
             skip_analysis: 是否跳过 AI 分析
+            single_stock_notify: 是否启用单股推送模式（每分析完一只立即推送）
             
         Returns:
             AnalysisResult 或 None
@@ -465,6 +469,17 @@ class StockAnalysisPipeline:
                     f"[{code}] 分析完成: {result.operation_advice}, "
                     f"评分 {result.sentiment_score}"
                 )
+                
+                # 单股推送模式（#55）：每分析完一只股票立即推送
+                if single_stock_notify and self.notifier.is_available():
+                    try:
+                        single_report = self.notifier.generate_single_stock_report(result)
+                        if self.notifier.send(single_report):
+                            logger.info(f"[{code}] 单股推送成功")
+                        else:
+                            logger.warning(f"[{code}] 单股推送失败")
+                    except Exception as e:
+                        logger.error(f"[{code}] 单股推送异常: {e}")
             
             return result
             
@@ -511,6 +526,11 @@ class StockAnalysisPipeline:
         logger.info(f"股票列表: {', '.join(stock_codes)}")
         logger.info(f"并发数: {self.max_workers}, 模式: {'仅获取数据' if dry_run else '完整分析'}")
         
+        # 单股推送模式（#55）：从配置读取
+        single_stock_notify = getattr(self.config, 'single_stock_notify', False)
+        if single_stock_notify:
+            logger.info("已启用单股推送模式：每分析完一只股票立即推送")
+        
         results: List[AnalysisResult] = []
         
         # 使用线程池并发处理
@@ -521,7 +541,8 @@ class StockAnalysisPipeline:
                 executor.submit(
                     self.process_single_stock, 
                     code, 
-                    skip_analysis=dry_run
+                    skip_analysis=dry_run,
+                    single_stock_notify=single_stock_notify and send_notification
                 ): code
                 for code in stock_codes
             }
@@ -551,13 +572,18 @@ class StockAnalysisPipeline:
         logger.info(f"===== 分析完成 =====")
         logger.info(f"成功: {success_count}, 失败: {fail_count}, 耗时: {elapsed_time:.2f} 秒")
         
-        # 发送通知
+        # 发送通知（单股推送模式下跳过汇总推送，避免重复）
         if results and send_notification and not dry_run:
-            self._send_notifications(results)
+            if single_stock_notify:
+                # 单股推送模式：只保存汇总报告，不再重复推送
+                logger.info("单股推送模式：跳过汇总推送，仅保存报告到本地")
+                self._send_notifications(results, skip_push=True)
+            else:
+                self._send_notifications(results)
         
         return results
     
-    def _send_notifications(self, results: List[AnalysisResult]) -> None:
+    def _send_notifications(self, results: List[AnalysisResult], skip_push: bool = False) -> None:
         """
         发送分析结果通知
         
@@ -565,6 +591,7 @@ class StockAnalysisPipeline:
         
         Args:
             results: 分析结果列表
+            skip_push: 是否跳过推送（仅保存到本地，用于单股推送模式）
         """
         try:
             logger.info("生成决策仪表盘日报...")
@@ -575,6 +602,10 @@ class StockAnalysisPipeline:
             # 保存到本地
             filepath = self.notifier.save_report_to_file(report)
             logger.info(f"决策仪表盘日报已保存: {filepath}")
+            
+            # 跳过推送（单股推送模式）
+            if skip_push:
+                return
             
             # 推送通知
             if self.notifier.is_available():
@@ -628,6 +659,7 @@ def parse_arguments() -> argparse.Namespace:
   python main.py --dry-run          # 仅获取数据，不进行 AI 分析
   python main.py --stocks 600519,000001  # 指定分析特定股票
   python main.py --no-notify        # 不发送推送通知
+  python main.py --single-notify    # 启用单股推送模式（每分析完一只立即推送）
   python main.py --schedule         # 启用定时任务模式
   python main.py --market-review    # 仅运行大盘复盘
         '''
@@ -655,6 +687,12 @@ def parse_arguments() -> argparse.Namespace:
         '--no-notify',
         action='store_true',
         help='不发送推送通知'
+    )
+    
+    parser.add_argument(
+        '--single-notify',
+        action='store_true',
+        help='启用单股推送模式：每分析完一只股票立即推送，而不是汇总推送'
     )
     
     parser.add_argument(
@@ -748,6 +786,10 @@ def run_full_analysis(
     这是定时任务调用的主函数
     """
     try:
+        # 命令行参数 --single-notify 覆盖配置（#55）
+        if getattr(args, 'single_notify', False):
+            config.single_stock_notify = True
+        
         # 创建调度器
         pipeline = StockAnalysisPipeline(
             config=config,
@@ -865,8 +907,9 @@ def main() -> int:
             search_service = None
             analyzer = None
             
-            if config.tavily_api_keys or config.serpapi_keys:
+            if config.bocha_api_keys or config.tavily_api_keys or config.serpapi_keys:
                 search_service = SearchService(
+                    bocha_keys=config.bocha_api_keys,
                     tavily_keys=config.tavily_api_keys,
                     serpapi_keys=config.serpapi_keys
                 )

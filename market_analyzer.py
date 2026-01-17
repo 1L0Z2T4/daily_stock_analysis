@@ -11,6 +11,7 @@
 """
 
 import logging
+import time
 from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Optional, Dict, Any, List
@@ -88,12 +89,12 @@ class MarketAnalyzer:
     
     # 主要指数代码
     MAIN_INDICES = {
-        '000001': '上证指数',
-        '399001': '深证成指',
-        '399006': '创业板指',
-        '000688': '科创50',
-        '000016': '上证50',
-        '000300': '沪深300',
+        'sh000001': '上证指数',
+        'sz399001': '深证成指',
+        'sz399006': '创业板指',
+        'sh000688': '科创50',
+        'sh000016': '上证50',
+        'sh000300': '沪深300',
     }
     
     def __init__(self, search_service: Optional[SearchService] = None, analyzer=None):
@@ -128,9 +129,22 @@ class MarketAnalyzer:
         self._get_sector_rankings(overview)
         
         # 4. 获取北向资金（可选）
-        self._get_north_flow(overview)
+        # self._get_north_flow(overview)
         
         return overview
+
+    def _call_akshare_with_retry(self, fn, name: str, attempts: int = 2):
+        last_error: Optional[Exception] = None
+        for attempt in range(1, attempts + 1):
+            try:
+                return fn()
+            except Exception as e:
+                last_error = e
+                logger.warning(f"[大盘] {name} 获取失败 (attempt {attempt}/{attempts}): {e}")
+                if attempt < attempts:
+                    time.sleep(min(2 ** attempt, 5))
+        logger.error(f"[大盘] {name} 最终失败: {last_error}")
+        return None
     
     def _get_main_indices(self) -> List[MarketIndex]:
         """获取主要指数实时行情"""
@@ -139,8 +153,8 @@ class MarketAnalyzer:
         try:
             logger.info("[大盘] 获取主要指数实时行情...")
             
-            # 使用 akshare 获取指数行情
-            df = ak.stock_zh_index_spot_em()
+            # 使用 akshare 获取指数行情（新浪财经接口，包含深市指数）
+            df = self._call_akshare_with_retry(ak.stock_zh_index_spot_sina, "指数行情", attempts=2)
             
             if df is not None and not df.empty:
                 for code, name in self.MAIN_INDICES.items():
@@ -183,7 +197,7 @@ class MarketAnalyzer:
             logger.info("[大盘] 获取市场涨跌统计...")
             
             # 获取全部A股实时行情
-            df = ak.stock_zh_a_spot_em()
+            df = self._call_akshare_with_retry(ak.stock_zh_a_spot_em, "A股实时行情", attempts=2)
             
             if df is not None and not df.empty:
                 # 涨跌统计
@@ -217,7 +231,7 @@ class MarketAnalyzer:
             logger.info("[大盘] 获取板块涨跌榜...")
             
             # 获取行业板块行情
-            df = ak.stock_board_industry_name_em()
+            df = self._call_akshare_with_retry(ak.stock_board_industry_name_em, "行业板块行情", attempts=2)
             
             if df is not None and not df.empty:
                 change_col = '涨跌幅'
@@ -245,26 +259,26 @@ class MarketAnalyzer:
         except Exception as e:
             logger.error(f"[大盘] 获取板块涨跌榜失败: {e}")
     
-    def _get_north_flow(self, overview: MarketOverview):
-        """获取北向资金流入"""
-        try:
-            logger.info("[大盘] 获取北向资金...")
+    # def _get_north_flow(self, overview: MarketOverview):
+    #     """获取北向资金流入"""
+    #     try:
+    #         logger.info("[大盘] 获取北向资金...")
             
-            # 获取北向资金数据
-            df = ak.stock_hsgt_north_net_flow_in_em(symbol="北上")
+    #         # 获取北向资金数据
+    #         df = ak.stock_hsgt_north_net_flow_in_em(symbol="北上")
             
-            if df is not None and not df.empty:
-                # 取最新一条数据
-                latest = df.iloc[-1]
-                if '当日净流入' in df.columns:
-                    overview.north_flow = float(latest['当日净流入']) / 1e8  # 转为亿元
-                elif '净流入' in df.columns:
-                    overview.north_flow = float(latest['净流入']) / 1e8
+    #         if df is not None and not df.empty:
+    #             # 取最新一条数据
+    #             latest = df.iloc[-1]
+    #             if '当日净流入' in df.columns:
+    #                 overview.north_flow = float(latest['当日净流入']) / 1e8  # 转为亿元
+    #             elif '净流入' in df.columns:
+    #                 overview.north_flow = float(latest['净流入']) / 1e8
                     
-                logger.info(f"[大盘] 北向资金净流入: {overview.north_flow:.2f}亿")
+    #             logger.info(f"[大盘] 北向资金净流入: {overview.north_flow:.2f}亿")
                 
-        except Exception as e:
-            logger.warning(f"[大盘] 获取北向资金失败: {e}")
+    #     except Exception as e:
+    #         logger.warning(f"[大盘] 获取北向资金失败: {e}")
     
     def search_market_news(self) -> List[Dict]:
         """

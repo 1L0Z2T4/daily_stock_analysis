@@ -10,6 +10,46 @@
 ### 计划中
 - Web 管理界面
 
+## [1.5.0] - 2026-01-17
+
+### 新增
+- 📲 单股推送模式（[#55](https://github.com/ZhuLinsen/daily_stock_analysis/issues/55)）
+  - 每分析完一只股票立即推送，不用等全部分析完
+  - 命令行参数：`--single-notify`
+  - 环境变量：`SINGLE_STOCK_NOTIFY=true`
+- 🔐 自定义 Webhook Bearer Token 认证（[#51](https://github.com/ZhuLinsen/daily_stock_analysis/issues/51)）
+  - 支持需要 Token 认证的 Webhook 端点
+  - 环境变量：`CUSTOM_WEBHOOK_BEARER_TOKEN`
+
+## [1.4.0] - 2026-01-17
+
+### 新增
+- 📱 Pushover 推送支持（PR #26）
+  - 支持 iOS/Android 跨平台推送
+  - 通过 `PUSHOVER_USER_KEY` 和 `PUSHOVER_API_TOKEN` 配置
+- 🔍 博查搜索 API 集成（PR #27）
+  - 中文搜索优化，支持 AI 摘要
+  - 通过 `BOCHA_API_KEYS` 配置
+- 📊 Efinance 数据源支持（PR #59）
+  - 新增 efinance 作为数据源选项
+- 🇭🇰 港股支持（PR #17）
+  - 支持 5 位代码或 HK 前缀（如 `hk00700`、`hk1810`）
+
+### 修复
+- 🔧 飞书 Markdown 渲染优化（PR #34）
+  - 使用交互卡片和格式化器修复渲染问题
+- ♻️ 股票列表热重载（PR #42 修复）
+  - 分析前自动重载 `STOCK_LIST` 配置
+- 🐛 钉钉 Webhook 20KB 限制处理
+  - 长消息自动分块发送，避免被截断
+- 🔄 AkShare API 重试机制增强
+  - 添加失败缓存，避免重复请求失败接口
+
+### 改进
+- 📝 README 精简优化
+  - 高级配置移至 `docs/full-guide.md`
+
+
 ## [1.3.0] - 2026-01-12
 
 ### 新增
