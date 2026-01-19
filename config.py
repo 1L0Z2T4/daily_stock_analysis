@@ -121,6 +121,11 @@ class Config:
     retry_base_delay: float = 1.0
     retry_max_delay: float = 30.0
     
+    # === WebUI 配置 ===
+    webui_enabled: bool = False
+    webui_host: str = "127.0.0.1"
+    webui_port: int = 8000
+    
     # 单例实例存储
     _instance: Optional['Config'] = None
     
@@ -214,6 +219,9 @@ class Config:
             schedule_enabled=os.getenv('SCHEDULE_ENABLED', 'false').lower() == 'true',
             schedule_time=os.getenv('SCHEDULE_TIME', '18:00'),
             market_review_enabled=os.getenv('MARKET_REVIEW_ENABLED', 'true').lower() == 'true',
+            webui_enabled=os.getenv('WEBUI_ENABLED', 'false').lower() == 'true',
+            webui_host=os.getenv('WEBUI_HOST', '127.0.0.1'),
+            webui_port=int(os.getenv('WEBUI_PORT', '8000')),
         )
     
     @classmethod

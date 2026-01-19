@@ -6,6 +6,7 @@
 
 ## 📑 目录
 
+- [GitHub Actions 详细配置](#github-actions-详细配置)
 - [环境变量完整列表](#环境变量完整列表)
 - [Docker 部署](#docker-部署)
 - [本地运行详细配置](#本地运行详细配置)
@@ -13,6 +14,90 @@
 - [通知渠道详细配置](#通知渠道详细配置)
 - [数据源配置](#数据源配置)
 - [高级功能](#高级功能)
+- [本地 WebUI 管理界面](#本地-webui-管理界面)
+
+---
+
+## GitHub Actions 详细配置
+
+### 1. Fork 本仓库
+
+点击右上角 `Fork` 按钮
+
+### 2. 配置 Secrets
+
+进入你 Fork 的仓库 → `Settings` → `Secrets and variables` → `Actions` → `New repository secret`
+
+<div align="center">
+  <img src="../sources/secret_config.png" alt="GitHub Secrets 配置示意图" width="600">
+</div>
+
+#### AI 模型配置（二选一）
+
+| Secret 名称 | 说明 | 必填 |
+|------------|------|:----:|
+| `GEMINI_API_KEY` | [Google AI Studio](https://aistudio.google.com/) 获取免费 Key | ✅* |
+| `OPENAI_API_KEY` | OpenAI 兼容 API Key（支持 DeepSeek、通义千问等） | 可选 |
+| `OPENAI_BASE_URL` | OpenAI 兼容 API 地址（如 `https://api.deepseek.com/v1`） | 可选 |
+| `OPENAI_MODEL` | 模型名称（如 `deepseek-chat`） | 可选 |
+
+> *注：`GEMINI_API_KEY` 和 `OPENAI_API_KEY` 至少配置一个
+
+#### 通知渠道配置（可同时配置多个，全部推送）
+
+| Secret 名称 | 说明 | 必填 |
+|------------|------|:----:|
+| `WECHAT_WEBHOOK_URL` | 企业微信 Webhook URL | 可选 |
+| `FEISHU_WEBHOOK_URL` | 飞书 Webhook URL | 可选 |
+| `TELEGRAM_BOT_TOKEN` | Telegram Bot Token（@BotFather 获取） | 可选 |
+| `TELEGRAM_CHAT_ID` | Telegram Chat ID | 可选 |
+| `EMAIL_SENDER` | 发件人邮箱（如 `xxx@qq.com`） | 可选 |
+| `EMAIL_PASSWORD` | 邮箱授权码（非登录密码） | 可选 |
+| `EMAIL_RECEIVERS` | 收件人邮箱（多个用逗号分隔，留空则发给自己） | 可选 |
+| `CUSTOM_WEBHOOK_URLS` | 自定义 Webhook（支持钉钉等，多个用逗号分隔） | 可选 |
+| `CUSTOM_WEBHOOK_BEARER_TOKEN` | 自定义 Webhook 的 Bearer Token（用于需要认证的 Webhook） | 可选 |
+| `SINGLE_STOCK_NOTIFY` | 单股推送模式：设为 `true` 则每分析完一只股票立即推送 | 可选 |
+
+> *注：至少配置一个渠道，配置多个则同时推送
+
+#### 其他配置
+
+| Secret 名称 | 说明 | 必填 |
+|------------|------|:----:|
+| `STOCK_LIST` | 自选股代码，如 `600519,300750,002594` | ✅ |
+| `TAVILY_API_KEYS` | [Tavily](https://tavily.com/) 搜索 API（新闻搜索） | 推荐 |
+| `BOCHA_API_KEYS` | [博查搜索](https://open.bocha.cn/) Web Search API（中文搜索优化，支持AI摘要，多个key用逗号分隔） | 可选 |
+| `SERPAPI_API_KEYS` | [SerpAPI](https://serpapi.com/) 备用搜索 | 可选 |
+| `TUSHARE_TOKEN` | [Tushare Pro](https://tushare.pro/) Token | 可选 |
+
+#### ✅ 最小配置示例
+
+如果你想快速开始，最少需要配置以下项：
+
+1. **AI 模型**：`GEMINI_API_KEY`（推荐）或 `OPENAI_API_KEY`
+2. **通知渠道**：至少配置一个，如 `WECHAT_WEBHOOK_URL` 或 `EMAIL_SENDER` + `EMAIL_PASSWORD`
+3. **股票列表**：`STOCK_LIST`（必填）
+4. **搜索 API**：`TAVILY_API_KEYS`（强烈推荐，用于新闻搜索）
+
+> 💡 配置完以上 4 项即可开始使用！
+
+### 3. 启用 Actions
+
+1. 进入你 Fork 的仓库
+2. 点击顶部的 `Actions` 标签
+3. 如果看到提示，点击 `I understand my workflows, go ahead and enable them`
+
+### 4. 手动测试
+
+1. 进入 `Actions` 标签
+2. 左侧选择 `每日股票分析` workflow
+3. 点击右侧的 `Run workflow` 按钮
+4. 选择运行模式
+5. 点击绿色的 `Run workflow` 确认
+
+### 5. 完成！
+
+默认每个工作日 **18:00（北京时间）** 自动执行。
 
 ---
 
@@ -43,6 +128,7 @@
 | `EMAIL_PASSWORD` | 邮箱授权码（非登录密码） | 可选 |
 | `EMAIL_RECEIVERS` | 收件人邮箱（逗号分隔，留空发给自己） | 可选 |
 | `CUSTOM_WEBHOOK_URLS` | 自定义 Webhook（逗号分隔） | 可选 |
+| `CUSTOM_WEBHOOK_BEARER_TOKEN` | 自定义 Webhook Bearer Token | 可选 |
 | `PUSHOVER_USER_KEY` | Pushover 用户 Key | 可选 |
 | `PUSHOVER_API_TOKEN` | Pushover API Token | 可选 |
 
@@ -323,6 +409,38 @@ python main.py --debug
 日志文件位置：
 - 常规日志：`logs/stock_analysis_YYYYMMDD.log`
 - 调试日志：`logs/stock_analysis_debug_YYYYMMDD.log`
+
+---
+
+## 本地 WebUI 管理界面
+
+仅用于本地环境，方便查看和修改 `.env` 中的自选股列表。
+
+#### 1. 启动方式
+
+**临时启动**：
+```bash
+python main.py --webui
+```
+
+**永久启用**：
+在 `.env` 中设置：
+```env
+WEBUI_ENABLED=true
+```
+
+#### 2. 自定义配置
+如果需要修改默认端口或允许局域网访问：
+
+```env
+WEBUI_HOST=0.0.0.0    # 默认 127.0.0.1
+WEBUI_PORT=8888       # 默认 8000
+```
+
+#### 3. 访问与使用
+- 浏览器访问：`http://127.0.0.1:8000` (或您配置的端口)
+- 支持直接编辑股票代码，保存后立即生效（下次运行分析时生效）
+- **注意**：此功能在 GitHub Actions 环境中会自动禁用。
 
 ---
 

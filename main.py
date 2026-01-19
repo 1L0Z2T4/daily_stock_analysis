@@ -720,6 +720,12 @@ def parse_arguments() -> argparse.Namespace:
         help='跳过大盘复盘分析'
     )
     
+    parser.add_argument(
+        '--webui',
+        action='store_true',
+        help='启动本地配置 WebUI'
+    )
+    
     return parser.parse_args()
 
 
@@ -897,6 +903,17 @@ def main() -> int:
         stock_codes = [code.strip() for code in args.stocks.split(',') if code.strip()]
         logger.info(f"使用命令行指定的股票列表: {stock_codes}")
     
+    # === 启动 WebUI (如果启用) ===
+    # 优先级: 命令行参数 > 配置文件
+    start_webui = (args.webui or config.webui_enabled) and os.getenv("GITHUB_ACTIONS") != "true"
+    
+    if start_webui:
+        try:
+            from webui import run_server_in_thread
+            run_server_in_thread(host=config.webui_host, port=config.webui_port)
+        except Exception as e:
+            logger.error(f"启动 WebUI 失败: {e}")
+
     try:
         # 模式1: 仅大盘复盘
         if args.market_review:
@@ -941,6 +958,17 @@ def main() -> int:
         run_full_analysis(config, args, stock_codes)
         
         logger.info("\n程序执行完成")
+        
+        # 如果启用了 WebUI 且是非定时任务模式，保持程序运行以便访问 WebUI
+        if start_webui and not (args.schedule or config.schedule_enabled):
+            logger.info("WebUI 运行中 (按 Ctrl+C 退出)...")
+            try:
+                # 简单的保持活跃循环
+                while True:
+                    time.sleep(1)
+            except KeyboardInterrupt:
+                pass
+        
         return 0
         
     except KeyboardInterrupt:
